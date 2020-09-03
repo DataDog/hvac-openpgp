@@ -27,16 +27,19 @@ class TestOpenPGP(unittest.TestCase):
 
   def test_create_key(self):
     # Unsupported parameters.
-    self.assertRaises(UnsupportedParam, self.openpgp.create_key,
-                      self.random_name(), allow_plaintext_backup=True)
-    self.assertRaises(UnsupportedParam, self.openpgp.create_key,
-                      self.random_name(), convergent_encryption=True)
-    self.assertRaises(UnsupportedParam, self.openpgp.create_key,
-                      self.random_name(), derived=True)
+    unsupported_parameters = (
+      {'allow_plaintext_backup': True},
+      {'convergent_encryption': True},
+      {'derived': True},
+    )
+    for parameter in unsupported_parameters:
+      with self.assertRaises(UnsupportedParam,
+                             msg=f'Unsupported parameter: {parameter}!'):
+        self.openpgp.create_key(self.random_name(), **parameter)
 
     # No key type.
-    self.assertRaises(ParamValidationError, self.openpgp.create_key,
-                      self.random_name())
+    with self.assertRaises(ParamValidationError, msg='No key type!'):
+      self.openpgp.create_key(self.random_name())
 
     # Duplicate keys.
     for key_type in ALLOWED_KEY_TYPES:
