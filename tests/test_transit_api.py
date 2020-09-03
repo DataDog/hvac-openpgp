@@ -5,8 +5,13 @@
 
 import os
 import unittest
+import uuid
 
-from hvac.exceptions import ParamValidationError
+from hvac.exceptions import (
+  InvalidRequest,
+  ParamValidationError
+)
+
 from hvac_openpgp import Client
 from hvac_openpgp.constants import ALLOWED_KEY_TYPES
 from hvac_openpgp.exceptions import UnsupportedParam
@@ -17,37 +22,46 @@ class TestOpenPGP(unittest.TestCase):
     self.client = Client(os.environ['VAULT_ADDR'], os.environ['VAULT_TOKEN'])
     self.openpgp = self.client.secrets.openpgp
 
-  def test_create_key(self):
-    name = 'create-key'
+  def random_name(self):
+    return str(uuid.uuid4())
 
+  def test_create_key(self):
     # Unsupported parameters.
     self.assertRaises(UnsupportedParam, self.openpgp.create_key,
-                      name, allow_plaintext_backup=True)
+                      self.random_name(), allow_plaintext_backup=True)
     self.assertRaises(UnsupportedParam, self.openpgp.create_key,
-                      name, convergent_encryption=True)
+                      self.random_name(), convergent_encryption=True)
     self.assertRaises(UnsupportedParam, self.openpgp.create_key,
-                      name, derived=True)
+                      self.random_name(), derived=True)
 
     # No key type.
-    self.assertRaises(ParamValidationError, self.openpgp.create_key, name)
+    self.assertRaises(ParamValidationError, self.openpgp.create_key,
+                      self.random_name())
+
+    # Duplicate keys.
+    for key_type in ALLOWED_KEY_TYPES:
+      fixed_name = self.random_name()
+      self.openpgp.create_key(fixed_name, key_type=key_type)
+      with self.assertRaises(InvalidRequest, msg='Duplicate key created!'):
+        self.openpgp.create_key(fixed_name, key_type=key_type)
 
     # Allowed key types, exportable values, real names, and email addresses.
     for key_type in ALLOWED_KEY_TYPES:
       for exportable in (None, False, True):
         for real_name in (None, 'John Doe'):
           for email in (None, 'john.doe@datadoghq.com'):
-            r = self.openpgp.create_key(name, key_type=key_type,
+            r = self.openpgp.create_key(self.random_name(),
+                                        key_type=key_type,
                                         exportable=exportable,
                                         real_name=real_name,
                                         email=email)
             r.raise_for_status()
 
   def test_read_key(self):
-    name = 'read-key'
-
     # Create a key.
     for key_type in ALLOWED_KEY_TYPES:
       for exportable in (None, False, True):
+        name = self.random_name()
         r = self.openpgp.create_key(name, key_type=key_type,
                                     exportable=exportable)
         r.raise_for_status()
