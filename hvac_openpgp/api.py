@@ -3,9 +3,19 @@
 
 """Transit-Secrets-Engine-like API module."""
 
-from hvac import exceptions, utils
 from hvac.api.secrets_engines.transit import Transit
-from .constants import ALLOWED_KEY_TYPES
+from hvac.exceptions import ParamValidationError
+from hvac.utils import (
+    format_url,
+    remove_nones,
+)
+
+from .constants import (
+    ALLOWED_HASH_DATA_ALGORITHMS,
+    ALLOWED_KEY_TYPES,
+    ALLOWED_MARSHALING_ALGORITHMS,
+    ALLOWED_SIGNATURE_ALGORITHMS,
+)
 from .exceptions import UnsupportedParam
 
 DEFAULT_MOUNT_POINT = 'vault-gpg-plugin'
@@ -48,6 +58,7 @@ class OpenPGP(Transit):
         :type allow_plaintext_backup: bool
 
         :param key_type: Specifies the type of key to create. The currently-supported types are:
+
             * **rsa-2048**: RSA with bit size of 2048 (asymmetric)
             * **rsa-3072**: RSA with bit size of 3072 (asymmetric)
             * **rsa-4096**: RSA with bit size of 4096 (asymmetric)
@@ -59,18 +70,19 @@ class OpenPGP(Transit):
         :return: The response of the request.
         :rtype: requests.Response
         """
+
         # Unsupported parameters.
-        if convergent_encryption:
+        if convergent_encryption is not None:
             raise UnsupportedParam('convergent encryption not supported')
-        if derived:
+        if derived is not None:
             raise UnsupportedParam('key derivation not supported')
-        if allow_plaintext_backup:
+        if allow_plaintext_backup is not None:
             raise UnsupportedParam('plaintext key backups not supported')
 
         # Allowed key types: only particular sizes of RSA.
         if key_type is None or key_type not in ALLOWED_KEY_TYPES:
             error_msg = 'invalid key_type argument provided "{arg}", supported types: "{allowed_types}"'
-            raise exceptions.ParamValidationError(error_msg.format(
+            raise ParamValidationError(error_msg.format(
                 arg=key_type,
                 allowed_types=', '.join(ALLOWED_KEY_TYPES),
             ))
@@ -78,7 +90,7 @@ class OpenPGP(Transit):
         # JSON parameters to the plugin.
         # Note: we ignore the key-type, as we assume only RSA keys.
         _, key_bits = key_type.split('-')
-        params = utils.remove_nones({
+        params = remove_nones({
             'comment': comment,
             'email': email,
             'exportable': exportable,
@@ -89,7 +101,7 @@ class OpenPGP(Transit):
         })
 
         # The actual call to the plugin.
-        api_path = utils.format_url(
+        api_path = format_url(
             '/v1/{mount_point}/keys/{name}',
             mount_point=mount_point,
             name=name,
@@ -118,7 +130,9 @@ class OpenPGP(Transit):
         :return: The JSON response of the read_key request.
         :rtype: dict
         """
-        api_path = utils.format_url(
+
+        # The actual call to the plugin.
+        api_path = format_url(
             '/v1/{mount_point}/keys/{name}',
             mount_point=mount_point,
             name=name,
@@ -168,7 +182,106 @@ class OpenPGP(Transit):
 
     def sign_data(self, name, hash_input, key_version=None, hash_algorithm=None, context=None, prehashed=None,
                   signature_algorithm=None, marshaling_algorithm=None, mount_point=DEFAULT_MOUNT_POINT):
-        raise NotImplementedError
+        """Return the cryptographic signature of the given data using the named key and the specified hash algorithm.
+
+        The key must be of a type that supports signing.
+
+        Supported methods:
+            POST: /{mount_point}/sign/{name}(/{hash_algorithm}). Produces: 200 application/json
+
+        :param name: Specifies the name of the encryption key to use for signing. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param hash_input: Specifies the base64 encoded input data.
+        :type hash_input: str | unicode
+
+        :param key_version: Specifies the version of the key to use for signing. If not set, uses the latest version.
+            Must be greater than or equal to the key's min_encryption_version, if set.
+            Not supported at the time of writing.
+        :type key_version: int
+
+        :param hash_algorithm: Specifies the hash algorithm to use for supporting key types (notably, not including
+            ed25519 which specifies its own hash algorithm). This can also be specified as part of the URL.
+            Currently-supported algorithms are: sha2-224, sha2-256, sha2-384, sha2-512
+        :type hash_algorithm: str | unicode
+
+        :param context: Base64 encoded context for key derivation. Required if key derivation is enabled; currently only
+            available with ed25519 keys. Not supported at the time of writing.
+        :type context: str | unicode
+
+        :param prehashed: Set to true when the input is already hashed. If the key type is rsa-2048 or rsa-4096, then
+            the algorithm used to hash the input should be indicated by the hash_algorithm parameter. Just as the value
+            to sign should be the base64-encoded representation of the exact binary data you want signed, when set, input
+            is expected to be base64-encoded binary hashed data, not hex-formatted. (As an example, on the command line,
+            you could generate a suitable input via openssl dgst -sha256 -binary | base64.)
+            Not supported at the time of writing.
+        :type prehashed: bool
+
+        :param signature_algorithm: When using a RSA key, specifies the RSA signature algorithm to use for signing.
+            Supported signature types are: pkcs1v15
+        :type signature_algorithm: str | unicode
+
+        :param marshaling_algorithm: Specifies the way in which the signature should be marshaled.
+            Supported types are: ascii-armor, base64
+        :type marshaling_algorithm: str | unicode
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The JSON response of the request.
+        :rtype: dict
+        """
+
+        # Unsupported parameters.
+        if key_version is not None:
+            raise UnsupportedParam('key versions not supported')
+        if context is not None:
+            raise UnsupportedParam('context for key derivation not supported')
+        if prehashed is not None:
+            raise UnsupportedParam('prehashed input not supported')
+
+        if hash_algorithm is not None and hash_algorithm not in ALLOWED_HASH_DATA_ALGORITHMS:
+            error_msg = 'invalid hash_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=hash_algorithm,
+                allowed_types=', '.join(ALLOWED_HASH_DATA_ALGORITHMS),
+            ))
+
+        if signature_algorithm is not None and signature_algorithm not in ALLOWED_SIGNATURE_ALGORITHMS:
+            error_msg = 'invalid signature_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=signature_algorithm,
+                allowed_types=', '.join(ALLOWED_SIGNATURE_ALGORITHMS),
+            ))
+
+        if marshaling_algorithm is not None and marshaling_algorithm not in ALLOWED_MARSHALING_ALGORITHMS:
+            error_msg = 'invalid marshaling_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=marshaling_algorithm,
+                allowed_types=', '.join(ALLOWED_MARSHALING_ALGORITHMS),
+            ))
+
+        # JSON parameters to the plugin.
+        params = {
+            'input': hash_input,
+        }
+        params.update(
+            remove_nones({
+                'algorithm': hash_algorithm,
+                'format': marshaling_algorithm,
+            })
+        )
+
+        # The actual call to the plugin.
+        api_path = format_url(
+            '/v1/{mount_point}/sign/{name}',
+            mount_point=mount_point,
+            name=name,
+        )
+        return self._adapter.post(
+            url=api_path,
+            json=params,
+        )
 
     def verify_signed_data(self, name, hash_input, signature=None, hmac=None, hash_algorithm=None, context=None,
                            prehashed=None, signature_algorithm=None, marshaling_algorithm=None, mount_point=DEFAULT_MOUNT_POINT):
