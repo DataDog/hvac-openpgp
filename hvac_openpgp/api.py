@@ -247,6 +247,7 @@ class OpenPGP(Transit):
                 allowed_types=', '.join(ALLOWED_HASH_DATA_ALGORITHMS),
             ))
 
+        # Validated but ignored for now.
         if signature_algorithm is not None and signature_algorithm not in ALLOWED_SIGNATURE_ALGORITHMS:
             error_msg = 'invalid signature_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
             raise ParamValidationError(error_msg.format(
@@ -285,7 +286,105 @@ class OpenPGP(Transit):
 
     def verify_signed_data(self, name, hash_input, signature=None, hmac=None, hash_algorithm=None, context=None,
                            prehashed=None, signature_algorithm=None, marshaling_algorithm=None, mount_point=DEFAULT_MOUNT_POINT):
-        raise NotImplementedError
+        """Return whether the provided signature is valid for the given data.
+
+        Supported methods:
+            POST: /{mount_point}/verify/{name}(/{hash_algorithm}). Produces: 200 application/json
+
+        :param name: Specifies the name of the encryption key that was used to generate the signature or HMAC.
+        :type name: str | unicode
+
+        :param hash_input: Specifies the base64 encoded input data.
+        :type input: str | unicode
+
+        :param signature: Specifies the signature output from the /transit/sign function. Either this must be supplied
+            or hmac must be supplied.
+        :type signature: str | unicode
+
+        :param hmac: Specifies the signature output from the /transit/hmac function. Either this must be supplied or
+            signature must be supplied.
+        :type hmac: str | unicode
+
+        :param hash_algorithm: Specifies the hash algorithm to use. This can also be specified as part of the URL.
+            Currently-supported algorithms are: sha2-224, sha2-256, sha2-384, sha2-512
+        :type hash_algorithm: str | unicode
+
+        :param context: Base64 encoded context for key derivation. Required if key derivation is enabled; currently only
+            available with ed25519 keys.
+        :type context: str | unicode
+
+        :param prehashed: Set to true when the input is already hashed. If the key type is rsa-2048 or rsa-4096, then
+            the algorithm used to hash the input should be indicated by the hash_algorithm parameter.
+        :type prehashed: bool
+
+        :param signature_algorithm: When using a RSA key, specifies the RSA signature algorithm to use for signature
+            verification. Supported signature types are: pss, pkcs1v15
+        :type signature_algorithm: str | unicode
+
+        :param marshaling_algorithm: Specifies the way in which the signature should be marshaled. This currently only applies to ECDSA keys.
+            Supported types are: asn1, jws
+        :type marshaling_algorithm: str | unicode
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The JSON response of the request.
+        :rtype: dict
+        """
+
+        # Unsupported parameters.
+        if hmac is not None:
+            raise UnsupportedParam('hmac not supported')
+        if context is not None:
+            raise UnsupportedParam('context for key derivation not supported')
+        if prehashed is not None:
+            raise UnsupportedParam('prehashed input not supported')
+
+        if signature is None:
+            error_msg = '"signature" must be provided to verify signature'
+            raise ParamValidationError(error_msg)
+
+        # Validated but ignored for now.
+        if hash_algorithm is not None and hash_algorithm not in ALLOWED_HASH_DATA_ALGORITHMS:
+            error_msg = 'invalid hash_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=hash_algorithm,
+                allowed_types=', '.join(ALLOWED_HASH_DATA_ALGORITHMS),
+            ))
+
+        # Validated but ignored for now.
+        if signature_algorithm is not None and signature_algorithm not in ALLOWED_SIGNATURE_ALGORITHMS:
+            error_msg = 'invalid signature_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=signature_algorithm,
+                allowed_types=', '.join(ALLOWED_SIGNATURE_ALGORITHMS),
+            ))
+
+        if marshaling_algorithm is not None and marshaling_algorithm not in ALLOWED_MARSHALING_ALGORITHMS:
+            error_msg = 'invalid marshaling_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=marshaling_algorithm,
+                allowed_types=', '.join(ALLOWED_MARSHALING_ALGORITHMS),
+            ))
+
+        # JSON parameters to the plugin.
+        params = {
+            'name': name,
+            'input': hash_input,
+        }
+        params.update(
+            remove_nones({
+                'format': marshaling_algorithm,
+                'signature': signature,
+            })
+        )
+
+        # The actual call to the plugin.
+        api_path = format_url('/v1/{mount_point}/verify/{name}', mount_point=mount_point, name=name)
+        return self._adapter.post(
+            url=api_path,
+            json=params,
+        )
 
     def backup_key(self, name, mount_point=DEFAULT_MOUNT_POINT):
         raise NotImplementedError

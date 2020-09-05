@@ -37,7 +37,7 @@ class TestOpenPGP(unittest.TestCase):
   def random_name(self):
     return str(uuid.uuid4())
 
-  def test_create_key(self):
+  def test_create_and_read_key(self):
     # Unsupported parameters.
     unsupported_parameters = (
       {'allow_plaintext_backup': True},
@@ -65,37 +65,30 @@ class TestOpenPGP(unittest.TestCase):
       for exportable in self.EXPORTABLE:
         for real_name in (None, 'John Doe'):
           for email in (None, 'john.doe@datadoghq.com'):
-            r = self.openpgp.create_key(self.random_name(),
+            fixed_name = self.random_name()
+            r = self.openpgp.create_key(fixed_name,
                                         key_type=key_type,
                                         exportable=exportable,
                                         real_name=real_name,
                                         email=email)
             r.raise_for_status()
 
+            r = self.openpgp.read_key(fixed_name)
+            data = r['data']
+
+            # Public information.
+            self.assertIn('fingerprint', data)
+            self.assertIn('public_key', data)
+            self.assertIn('exportable', data)
+
+            # Private information.
+            self.assertNotIn('name', data)
+            self.assertNotIn('key', data)
+
   def test_read_key(self):
     # Read non-existent key.
     with self.assertRaises(InvalidPath, msg='Read non-existent key!'):
       self.openpgp.read_key(self.random_name())
-
-    # Read existing keys.
-    for key_type in ALLOWED_KEY_TYPES:
-      for exportable in self.EXPORTABLE:
-        name = self.random_name()
-        r = self.openpgp.create_key(name, key_type=key_type,
-                                    exportable=exportable)
-        r.raise_for_status()
-
-        r = self.openpgp.read_key(name)
-        data = r['data']
-
-        # Public information.
-        self.assertIn("fingerprint", data)
-        self.assertIn("public_key", data)
-        self.assertIn("exportable", data)
-
-        # Private information.
-        self.assertNotIn("name", data)
-        self.assertNotIn("key", data)
 
   # https://hvac.readthedocs.io/en/stable/usage/secrets_engines/transit.html#sign-data
   def base64ify(self, bytes_or_str):
@@ -112,22 +105,27 @@ class TestOpenPGP(unittest.TestCase):
       else:
           return output_bytes
 
-  def test_sign_key(self):
-
+  def test_sign_and_verify_data(self):
     for key_type in ALLOWED_KEY_TYPES:
       fixed_name = self.random_name()
       fixed_input = 'Hello, world!'
       base64_input = self.base64ify(fixed_input)
+      base64_bad_input = self.base64ify(fixed_input+'!!')
 
       # Sign w/o creating.
       with self.assertRaises(InvalidRequest,
                              msg=f'Nonexistent key: {fixed_name}!'):
         self.openpgp.sign_data(fixed_name, base64_input)
 
+      # Verify w/o creating.
+      with self.assertRaises(InvalidRequest,
+                             msg=f'Nonexistent key: {fixed_name}!'):
+        self.openpgp.verify_signed_data(fixed_name, base64_input, signature='')
+
       # Create key.
       self.openpgp.create_key(fixed_name, key_type=key_type)
 
-      # Unsupported parameters.
+      # Unsupported parameters for signing.
       unsupported_parameters = (
         {'key_version': 2},
         {'context': ''},
@@ -138,25 +136,69 @@ class TestOpenPGP(unittest.TestCase):
                               msg=f'Unsupported parameter: {parameter}!'):
           self.openpgp.sign_data(fixed_name, base64_input, **parameter)
 
-      # Not base64 hash input.
+      # Unsupported parameters for verification.
+      unsupported_parameters = (
+        {'context': ''},
+        {'hmac': ''},
+        {'prehashed': True},
+      )
+      for parameter in unsupported_parameters:
+        with self.assertRaises(UnsupportedParam,
+                              msg=f'Unsupported parameter: {parameter}!'):
+          self.openpgp.verify_signed_data(fixed_name, base64_input,
+                                          signature='', **parameter)
+
+      # Not base64 hash input for signing.
       with self.assertRaises(InvalidRequest, msg='Not base64 hash input!'):
         self.openpgp.sign_data(fixed_name, fixed_input)
 
-      # Default hash, marshaling, and signature algorithms.
-      r = self.openpgp.sign_data(fixed_name, base64_input)
-      data = r['data']
-      self.assertIn("signature", data)
+      # Not base64 hash input for verification.
+      with self.assertRaises(InvalidRequest, msg='Not base64 hash input!'):
+        self.openpgp.verify_signed_data(fixed_name, fixed_input, signature='')
 
-      # All supported hash, marshaling, and signature algorithms.
-      for hash_algorithm in ALLOWED_HASH_DATA_ALGORITHMS:
-        for marshaling_algorithm in ALLOWED_MARSHALING_ALGORITHMS:
-          for signature_algorithm in ALLOWED_SIGNATURE_ALGORITHMS:
+      # All supported as well as default hash, marshaling, and signature algorithms.
+      for hash_algorithm in ALLOWED_HASH_DATA_ALGORITHMS | {None}:
+        for marshaling_algorithm in ALLOWED_MARSHALING_ALGORITHMS | {None}:
+          for signature_algorithm in ALLOWED_SIGNATURE_ALGORITHMS | {None}:
+            # Make a signature.
             r = self.openpgp.sign_data(fixed_name, base64_input,
-                                      hash_algorithm=hash_algorithm,
-                                      marshaling_algorithm=marshaling_algorithm,
-                                      signature_algorithm=signature_algorithm)
-            data = r['data']
-            self.assertIn("signature", data)
+                                       hash_algorithm=hash_algorithm,
+                                       marshaling_algorithm=marshaling_algorithm,
+                                       signature_algorithm=signature_algorithm)
+            signature = r['data']['signature']
+
+            # Forget to pass signature for verification.
+            with self.assertRaises(ParamValidationError, msg='No "signature"!'):
+              self.openpgp.verify_signed_data(fixed_name, base64_input,
+                                                hash_algorithm=hash_algorithm,
+                                                marshaling_algorithm=marshaling_algorithm,
+                                                signature_algorithm=signature_algorithm)
+
+            # Original input.
+            r = self.openpgp.verify_signed_data(fixed_name, base64_input,
+                                                hash_algorithm=hash_algorithm,
+                                                marshaling_algorithm=marshaling_algorithm,
+                                                signature=signature,
+                                                signature_algorithm=signature_algorithm)
+            self.assertTrue(r['data']['valid'])
+
+            # Bad input.
+            r = self.openpgp.verify_signed_data(fixed_name, base64_bad_input,
+                                                hash_algorithm=hash_algorithm,
+                                                marshaling_algorithm=marshaling_algorithm,
+                                                signature=signature,
+                                                signature_algorithm=signature_algorithm)
+            self.assertFalse(r['data']['valid'])
+
+            # Bad signature.
+            mid_len = len(signature) // 2
+            bad_signature = signature[:mid_len] + '!!' + signature[mid_len:]
+            r = self.openpgp.verify_signed_data(fixed_name, base64_input,
+                                                hash_algorithm=hash_algorithm,
+                                                marshaling_algorithm=marshaling_algorithm,
+                                                signature=bad_signature,
+                                                signature_algorithm=signature_algorithm)
+            self.assertFalse(r['data']['valid'])
 
   def tearDown(self):
     pass
