@@ -142,7 +142,26 @@ class OpenPGP(Transit):
         )
 
     def list_keys(self, mount_point=DEFAULT_MOUNT_POINT):
-        raise NotImplementedError
+        """List keys (if there are any).
+
+        Only the key names are returned (not the actual keys themselves).
+        An exception is thrown if there are no keys.
+
+        Supported methods:
+            LIST: /{mount_point}/keys. Produces: 200 application/json
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The JSON response of the request.
+        :rtype: dict
+        """
+
+        # The actual call to the plugin.
+        api_path = format_url('/v1/{mount_point}/keys', mount_point=mount_point)
+        return self._adapter.list(
+            url=api_path
+        )
 
     def delete_key(self, name, mount_point=DEFAULT_MOUNT_POINT):
         raise NotImplementedError

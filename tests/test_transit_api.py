@@ -37,7 +37,27 @@ class TestOpenPGP(unittest.TestCase):
   def random_name(self):
     return str(uuid.uuid4())
 
-  def test_create_and_read_key(self):
+  def test_1_list_keys(self):
+    # List keys when there are none.
+    with self.assertRaises(InvalidPath, msg='Listed keys when there are none!'):
+      self.openpgp.list_keys()
+
+    # Create and list keys.
+    keys = []
+    for key_type in ALLOWED_KEY_TYPES:
+      name = self.random_name()
+      self.openpgp.create_key(name, key_type=key_type)
+      keys.append(name)
+
+    r = self.openpgp.list_keys()
+    assert sorted(r['data']['keys']) == sorted(keys)
+
+  def test_2_read_key(self):
+      # Read non-existent key.
+      with self.assertRaises(InvalidPath, msg='Read non-existent key!'):
+        self.openpgp.read_key(self.random_name())
+
+  def test_3_create_and_read_key(self):
     # Unsupported parameters.
     unsupported_parameters = (
       {'allow_plaintext_backup': True},
@@ -85,11 +105,6 @@ class TestOpenPGP(unittest.TestCase):
             self.assertNotIn('name', data)
             self.assertNotIn('key', data)
 
-  def test_read_key(self):
-    # Read non-existent key.
-    with self.assertRaises(InvalidPath, msg='Read non-existent key!'):
-      self.openpgp.read_key(self.random_name())
-
   # https://hvac.readthedocs.io/en/stable/usage/secrets_engines/transit.html#sign-data
   def base64ify(self, bytes_or_str):
       """Helper method to perform base64 encoding across Python 2.7 and Python 3.X"""
@@ -105,7 +120,7 @@ class TestOpenPGP(unittest.TestCase):
       else:
           return output_bytes
 
-  def test_sign_and_verify_data(self):
+  def test_4_sign_and_verify_data(self):
     for key_type in ALLOWED_KEY_TYPES:
       fixed_name = self.random_name()
       fixed_input = 'Hello, world!'
