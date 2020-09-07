@@ -39,6 +39,7 @@ class TestOpenPGP(unittest.TestCase):
 
   def test_1_list_keys(self):
     # List keys when there are none.
+    # TODO: Should this raise an exception in the first place?
     with self.assertRaises(InvalidPath, msg='Listed keys when there are none!'):
       self.openpgp.list_keys()
 
@@ -54,10 +55,11 @@ class TestOpenPGP(unittest.TestCase):
 
   def test_2_read_key(self):
       # Read non-existent key.
+      # TODO: Should this raise an exception in the first place?
       with self.assertRaises(InvalidPath, msg='Read non-existent key!'):
         self.openpgp.read_key(self.random_name())
 
-  def test_3_create_and_read_key(self):
+  def test_3_create_read_and_delete_key(self):
     # Unsupported parameters.
     unsupported_parameters = (
       {'allow_plaintext_backup': True},
@@ -72,13 +74,6 @@ class TestOpenPGP(unittest.TestCase):
     # No key type.
     with self.assertRaises(ParamValidationError, msg='No key type!'):
       self.openpgp.create_key(self.random_name())
-
-    # Duplicate keys.
-    for key_type in ALLOWED_KEY_TYPES:
-      fixed_name = self.random_name()
-      self.openpgp.create_key(fixed_name, key_type=key_type)
-      with self.assertRaises(InvalidRequest, msg='Duplicate key created!'):
-        self.openpgp.create_key(fixed_name, key_type=key_type)
 
     # Allowed key types, exportable values, real names, and email addresses.
     for key_type in ALLOWED_KEY_TYPES:
@@ -104,6 +99,18 @@ class TestOpenPGP(unittest.TestCase):
             # Private information.
             self.assertNotIn('name', data)
             self.assertNotIn('key', data)
+
+            # Delete.
+            r = self.openpgp.delete_key(fixed_name)
+            r.raise_for_status()
+
+    # Duplicate keys.
+    for key_type in ALLOWED_KEY_TYPES:
+      fixed_name = self.random_name()
+      self.openpgp.create_key(fixed_name, key_type=key_type)
+      # https://github.com/LeSuisse/vault-gpg-plugin/pull/51
+      with self.assertRaises(InvalidRequest, msg='Duplicate key created!'):
+        self.openpgp.create_key(fixed_name, key_type=key_type)
 
   # https://hvac.readthedocs.io/en/stable/usage/secrets_engines/transit.html#sign-data
   def base64ify(self, bytes_or_str):
@@ -214,6 +221,12 @@ class TestOpenPGP(unittest.TestCase):
                                                 signature=bad_signature,
                                                 signature_algorithm=signature_algorithm)
             self.assertFalse(r['data']['valid'])
+
+  def test_5_delete_key(self):
+      # Deleting a non-existent key does not raise an exception.
+      # TODO: inconsistent behaviour compared to list/read keys.
+      r = self.openpgp.delete_key(self.random_name())
+      r.raise_for_status()
 
   def tearDown(self):
     pass

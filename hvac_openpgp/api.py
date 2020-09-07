@@ -164,7 +164,36 @@ class OpenPGP(Transit):
         )
 
     def delete_key(self, name, mount_point=DEFAULT_MOUNT_POINT):
-        raise NotImplementedError
+        """Delete a named encryption key.
+
+        It will no longer be possible to decrypt any data encrypted with the named key. Because this is a potentially
+        catastrophic operation, the deletion_allowed tunable must be set in the key's /config endpoint.
+        Not supported at the time of writing; use Vault policies instead to control who can delete which keys.
+
+        Supported methods:
+            DELETE: /{mount_point}/keys/{name}. Produces: 204 (empty body)
+
+        :param name: Specifies the name of the encryption key to delete. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The response of the request.
+        :rtype: requests.Response
+        """
+
+        # JSON parameters to the plugin.
+        api_path = format_url(
+            '/v1/{mount_point}/keys/{name}',
+            mount_point=mount_point,
+            name=name,
+        )
+
+        # The actual call to the plugin.
+        return self._adapter.delete(
+            url=api_path,
+        )
 
     def update_key_configuration(self, name, min_decryption_version=None, min_encryption_version=None, deletion_allowed=None,
                                  exportable=None, allow_plaintext_backup=None, mount_point=DEFAULT_MOUNT_POINT):
