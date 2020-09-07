@@ -3,6 +3,12 @@
 """Constants related to the Transit-Secrets-like-Engine."""
 
 from hvac.constants.transit import ALLOWED_HASH_DATA_ALGORITHMS
+
+ALLOWED_EXPORT_KEY_TYPES = {
+    'encryption-key',
+    'signing-key',
+}
+
 ALLOWED_HASH_DATA_ALGORITHMS = set(ALLOWED_HASH_DATA_ALGORITHMS)
 
 ALLOWED_KEY_TYPES = {

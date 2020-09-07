@@ -54,9 +54,9 @@ class TestOpenPGP(unittest.TestCase):
     assert sorted(r['data']['keys']) == sorted(keys)
 
   def test_2_read_key(self):
-      # Read non-existent key.
+      # Read nonexistent key.
       # TODO: Should this raise an exception in the first place?
-      with self.assertRaises(InvalidPath, msg='Read non-existent key!'):
+      with self.assertRaises(InvalidPath, msg='Read nonexistent key!'):
         self.openpgp.read_key(self.random_name())
 
   def test_3_create_read_and_delete_key(self):
@@ -71,9 +71,9 @@ class TestOpenPGP(unittest.TestCase):
                              msg=f'Unsupported parameter: {parameter}!'):
         self.openpgp.create_key(self.random_name(), **parameter)
 
-    # No key type.
-    with self.assertRaises(ParamValidationError, msg='No key type!'):
-      self.openpgp.create_key(self.random_name())
+    # By default, RSA-4096 keys are created.
+    # TODO: test that it is indeed RSA-4096!
+    self.openpgp.create_key(self.random_name())
 
     # Allowed key types, exportable values, real names, and email addresses.
     for key_type in ALLOWED_KEY_TYPES:
@@ -105,12 +105,11 @@ class TestOpenPGP(unittest.TestCase):
             r.raise_for_status()
 
     # Duplicate keys.
-    for key_type in ALLOWED_KEY_TYPES:
-      fixed_name = self.random_name()
-      self.openpgp.create_key(fixed_name, key_type=key_type)
-      # https://github.com/LeSuisse/vault-gpg-plugin/pull/51
-      with self.assertRaises(InvalidRequest, msg='Duplicate key created!'):
-        self.openpgp.create_key(fixed_name, key_type=key_type)
+    fixed_name = self.random_name()
+    self.openpgp.create_key(fixed_name)
+    # https://github.com/LeSuisse/vault-gpg-plugin/pull/51
+    with self.assertRaises(InvalidRequest, msg='Duplicate key created!'):
+      self.openpgp.create_key(fixed_name)
 
   # https://hvac.readthedocs.io/en/stable/usage/secrets_engines/transit.html#sign-data
   def base64ify(self, bytes_or_str):
@@ -223,10 +222,47 @@ class TestOpenPGP(unittest.TestCase):
             self.assertFalse(r['data']['valid'])
 
   def test_5_delete_key(self):
-      # Deleting a non-existent key does not raise an exception.
+      # Deleting a nonexistent key does not raise an exception.
       # TODO: inconsistent behaviour compared to list/read keys.
       r = self.openpgp.delete_key(self.random_name())
       r.raise_for_status()
+
+  def test_6_export_key(self):
+    # Export nonexistent key.
+    # TODO: Should this raise an exception in the first place?
+    with self.assertRaises(InvalidPath, msg='Exported nonexistent key!'):
+      self.openpgp.export_key(self.random_name())
+
+    # Export key not marked as exportable.
+    nonexportable = self.random_name()
+    self.openpgp.create_key(nonexportable)
+    with self.assertRaises(InvalidRequest, msg='Exported nonexportable key!'):
+      self.openpgp.export_key(nonexportable)
+
+    # Export key marked as exportable.
+    exportable = self.random_name()
+    self.openpgp.create_key(exportable, exportable=True)
+
+    with self.assertRaises(UnsupportedParam,
+                           msg=f'Unsupported parameter: version!'):
+      self.openpgp.export_key(exportable, version=2)
+
+    r = self.openpgp.export_key(exportable)
+    data = r['data']
+
+    # Public information.
+    self.assertNotIn('fingerprint', data)
+    self.assertNotIn('public_key', data)
+    self.assertNotIn('exportable', data)
+
+    # Private information.
+    self.assertIn('name', data)
+    self.assertIn('key', data)
+
+    # Key type has no effect.
+    re = self.openpgp.export_key(exportable, key_type='encryption-key')
+    rs = self.openpgp.export_key(exportable, key_type='signing-key')
+    self.assertDictEqual(re['data'], rs['data'])
 
   def tearDown(self):
     pass

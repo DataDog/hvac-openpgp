@@ -11,6 +11,7 @@ from hvac.utils import (
 )
 
 from .constants import (
+    ALLOWED_EXPORT_KEY_TYPES,
     ALLOWED_HASH_DATA_ALGORITHMS,
     ALLOWED_KEY_TYPES,
     ALLOWED_MARSHALING_ALGORITHMS,
@@ -28,7 +29,7 @@ class OpenPGP(Transit):
 
     # TODO: Name, comment, email.
     def create_key(self, name, convergent_encryption=None, derived=None, exportable=None, allow_plaintext_backup=None,
-                   key_type=None, real_name=None, email=None, comment=None, mount_point=DEFAULT_MOUNT_POINT):
+                   key_type='rsa-4096', real_name=None, email=None, comment=None, mount_point=DEFAULT_MOUNT_POINT):
         """Create a new named encryption key of the specified type.
 
         The values set here cannot be changed after key creation.
@@ -202,8 +203,64 @@ class OpenPGP(Transit):
     def rotate_key(self, name, mount_point=DEFAULT_MOUNT_POINT):
         raise NotImplementedError
 
-    def export_key(self, name, key_type, version=None, mount_point=DEFAULT_MOUNT_POINT):
-        raise NotImplementedError
+    def export_key(self, name, key_type=None, version=None, mount_point=DEFAULT_MOUNT_POINT):
+        """Return the named key.
+
+        The keys object shows the value of the key for each version. If version is specified, the specific version will
+        be returned. If latest is provided as the version, the current key will be provided. Depending on the type of
+        key, different information may be returned. The key must be exportable to support this operation and the version
+        must still be valid.
+
+        Supported methods:
+            GET: /{mount_point}/export/{key_type}/{name}(/{version}). Produces: 200 application/json
+
+        :param name: Specifies the name of the key to read information about. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param key_type: Specifies the type of the key to export. This is specified as part of the URL. Valid values are:
+            encryption-key
+            signing-key
+        Validated but ignored at the time of writing, so it has no effect.
+        :type key_type: str | unicode
+
+        :param version: Specifies the version of the key to read. If omitted, all versions of the key will be returned.
+            If the version is set to latest, the current key will be returned. Not supported at the time of writing.
+        :type version: str | unicode
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The JSON response of the request.
+        :rtype: dict
+        """
+
+        # Unsupported parameters.
+        if version is not None:
+            raise UnsupportedParam('key versions not supported')
+
+        # Validated but ignored for now.
+        if key_type is not None and key_type not in ALLOWED_EXPORT_KEY_TYPES:
+            error_msg = 'invalid key_type argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=key_type,
+                allowed_types=', '.join(ALLOWED_EXPORT_KEY_TYPES),
+            ))
+
+        # JSON parameters to the plugin.
+        # NOTE: {key_type} is NOT part of the URL, unlike with Transit Secrets Engine.
+        api_path = format_url(
+            '/v1/{mount_point}/export/{name}',
+            mount_point=mount_point,
+            key_type=key_type,
+            name=name,
+        )
+
+        # The actual call to the plugin.
+        if version is not None:
+            api_path = self._adapter.urljoin(api_path, version)
+        return self._adapter.get(
+            url=api_path,
+        )
 
     def encrypt_data(self, name, plaintext, context=None, key_version=None, nonce=None, batch_input=None, type=None,
                      convergent_encryption=None, mount_point=DEFAULT_MOUNT_POINT):
