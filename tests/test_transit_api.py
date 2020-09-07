@@ -177,7 +177,7 @@ class TestOpenPGP(unittest.TestCase):
       with self.assertRaises(InvalidRequest, msg='Not base64 hash input!'):
         self.openpgp.verify_signed_data(fixed_name, fixed_input, signature='')
 
-      # All supported as well as default hash, marshaling, and signature algorithms.
+      # All supported as well as empty hash, marshaling, and signature algorithms.
       for hash_algorithm in ALLOWED_HASH_DATA_ALGORITHMS | {None}:
         for marshaling_algorithm in ALLOWED_MARSHALING_ALGORITHMS | {None}:
           for signature_algorithm in ALLOWED_SIGNATURE_ALGORITHMS | {None}:
@@ -220,6 +220,14 @@ class TestOpenPGP(unittest.TestCase):
                                                 signature=bad_signature,
                                                 signature_algorithm=signature_algorithm)
             self.assertFalse(r['data']['valid'])
+
+            # TODO: pass in mismatching hashing/marshaling algorithm.
+
+      # Test default hashing/marshaling algorithms.
+      r = self.openpgp.sign_data(fixed_name, base64_input)
+      signature = r['data']['signature']
+      r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=signature)
+      self.assertTrue(r['data']['valid'])
 
   def test_5_delete_key(self):
       # Deleting a nonexistent key does not raise an exception.

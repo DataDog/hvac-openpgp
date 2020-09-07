@@ -285,8 +285,8 @@ class OpenPGP(Transit):
     def generate_hmac(self, name, hash_input, key_version=None, algorithm=None, mount_point=DEFAULT_MOUNT_POINT):
         raise NotImplementedError
 
-    def sign_data(self, name, hash_input, key_version=None, hash_algorithm=None, context=None, prehashed=None,
-                  signature_algorithm=None, marshaling_algorithm=None, mount_point=DEFAULT_MOUNT_POINT):
+    def sign_data(self, name, hash_input, key_version=None, hash_algorithm='sha2-512', context=None, prehashed=None,
+                  signature_algorithm=None, marshaling_algorithm='ascii-armor', mount_point=DEFAULT_MOUNT_POINT):
         """Return the cryptographic signature of the given data using the named key and the specified hash algorithm.
 
         The key must be of a type that supports signing.
@@ -390,7 +390,8 @@ class OpenPGP(Transit):
         )
 
     def verify_signed_data(self, name, hash_input, signature=None, hmac=None, hash_algorithm=None, context=None,
-                           prehashed=None, signature_algorithm=None, marshaling_algorithm=None, mount_point=DEFAULT_MOUNT_POINT):
+                           prehashed=None, signature_algorithm=None, marshaling_algorithm='ascii-armor',
+                           mount_point=DEFAULT_MOUNT_POINT):
         """Return whether the provided signature is valid for the given data.
 
         Supported methods:
