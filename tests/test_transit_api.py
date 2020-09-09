@@ -107,7 +107,7 @@ class TestOpenPGP(unittest.TestCase):
     # Duplicate keys.
     fixed_name = self.random_name()
     self.openpgp.create_key(fixed_name)
-    # https://github.com/LeSuisse/vault-gpg-plugin/pull/51
+    # https://github.com/trishankatdatadog/vault-gpg-plugin/pull/5
     with self.assertRaises(InvalidRequest, msg='Duplicate key created!'):
       self.openpgp.create_key(fixed_name)
 
