@@ -117,6 +117,69 @@ class OpenPGP(Transit):
             json=params,
         )
 
+    def create_subkey(self, name, key_type='rsa-4096', capabilities=['sign'], expires=365*24*60*60,
+                      mount_point=DEFAULT_MOUNT_POINT):
+        """Create a new subkey of the specified type under the specified master key.
+
+        The values set here cannot be changed after subkey creation.
+
+        Supported methods:
+            POST: /{mount_point}/keys/{name}/subkeys. Produces: 204 (empty body)
+
+        :param name: Specifies the name of the master key with which to associate the new subkey. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param key_type: Specifies the type of the subkey to create. The currently-supported types are:
+
+            * **rsa-2048**: RSA with bit size of 2048 (asymmetric)
+            * **rsa-3072**: RSA with bit size of 3072 (asymmetric)
+            * **rsa-4096**: RSA with bit size of 4096 (asymmetric)
+        :type key_type: str | unicode
+
+        :param capabilities: Specifies the capabilities of the subkey.
+            Currently-supported capabilities are: sign
+        :type capabilities: list[str] | list[unicode]
+
+        :param expires: Specifies the number of seconds from the creation time (now) after which the subkey expires. If the number is zero, then the subkey never expires.
+        :type expires: int
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The response of the request.
+        :rtype: requests.Response
+        """
+
+        # Allowed key types: only particular sizes of RSA.
+        if key_type is None or key_type not in ALLOWED_KEY_TYPES:
+            error_msg = 'invalid key_type argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=key_type,
+                allowed_types=', '.join(ALLOWED_KEY_TYPES),
+            ))
+
+        # JSON parameters to the plugin.
+        # Note: we ignore the key-type, as we assume only RSA keys.
+        key_type, key_bits = key_type.split('-')
+        params = remove_nones({
+            'name': name,
+            'key_type': key_type,
+            'key_bits': key_bits,
+            'capabilities': capabilities,
+            'expires': expires,
+        })
+
+        # The actual call to the plugin.
+        api_path = format_url(
+            '/v1/{mount_point}/keys/{name}/subkeys',
+            mount_point=mount_point,
+            name=name,
+        )
+        return self._adapter.post(
+            url=api_path,
+            json=params,
+        )
+
     def read_key(self, name, mount_point=DEFAULT_MOUNT_POINT):
         """Read information about a named encryption key.
 
