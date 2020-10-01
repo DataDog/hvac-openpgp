@@ -210,6 +210,37 @@ class OpenPGP(Transit):
             url=api_path,
         )
 
+    def read_subkey(self, name, key_id, mount_point=DEFAULT_MOUNT_POINT):
+        """Read information, such as the key type, capabilities, and size, about the given subkey associated with the
+        given master key.
+
+        Supported methods:
+            GET: /{mount_point}/keys/{name}/subkeys/{key_id}. Produces: 200 application/json
+
+        :param name: Specifies the name of the master key with which the subkey is associated. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param key_id: Specifies Specifies the Key ID of the subkey. This can also be specified as part of the URL.
+        :type key_id: str | unicode
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The JSON response of the read_subkey request.
+        :rtype: dict
+        """
+
+        # The actual call to the plugin.
+        api_path = format_url(
+            '/v1/{mount_point}/keys/{name}/subkeys/{key_id}',
+            mount_point=mount_point,
+            name=name,
+            key_id=key_id,
+        )
+        return self._adapter.get(
+            url=api_path,
+        )
+
     def list_keys(self, mount_point=DEFAULT_MOUNT_POINT):
         """List keys (if there are any).
 
