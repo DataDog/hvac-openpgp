@@ -27,7 +27,6 @@ class OpenPGP(Transit):
     Reference: https://hvac.readthedocs.io/en/stable/usage/secrets_engines/transit.html
     """
 
-    # TODO: Name, comment, email.
     def create_key(self, name, convergent_encryption=None, derived=None, exportable=None, allow_plaintext_backup=None,
                    key_type='rsa-4096', real_name=None, email=None, comment=None, mount_point=DEFAULT_MOUNT_POINT):
         """Create a new named encryption key of the specified type.
@@ -39,6 +38,12 @@ class OpenPGP(Transit):
 
         :param name: Specifies the name of the encryption key to create. This is specified as part of the URL.
         :type name: str | unicode
+
+        :param email: Specifies the email of the identity associated with the generated GPG key.
+        :type email: str | unicode
+
+        :param comment: Specifies the comment of the identity associated with the generated GPG key.
+        :type comment: str | unicode
 
         :param convergent_encryption: If enabled, the key will support convergent encryption, where the same plaintext
             creates the same ciphertext. This requires derived to be set to true. When enabled, each
