@@ -263,6 +263,34 @@ class OpenPGP(Transit):
             url=api_path
         )
 
+    def list_subkeys(self, name, mount_point=DEFAULT_MOUNT_POINT):
+        """List subkeys (if there are any) associated with the GPG master key with the given name.
+
+        Only Key IDs of public keys of subkeys are returned.
+
+        Supported methods:
+            LIST: /{mount_point}/keys/{name}/subkeys. Produces: 200 application/json
+
+        :param name: Specifies the name of the master key with which the subkey is associated. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The JSON response of the request.
+        :rtype: dict
+        """
+
+        # The actual call to the plugin.
+        api_path = format_url(
+            '/v1/{mount_point}/keys/{name}/subkeys',
+            mount_point=mount_point,
+            name=name,
+        )
+        return self._adapter.list(
+            url=api_path
+        )
+
     def delete_key(self, name, mount_point=DEFAULT_MOUNT_POINT):
         """Delete a named encryption key.
 
