@@ -220,7 +220,7 @@ class OpenPGP(Transit):
         :param name: Specifies the name of the master key with which the subkey is associated. This is specified as part of the URL.
         :type name: str | unicode
 
-        :param key_id: Specifies Specifies the Key ID of the subkey. This can also be specified as part of the URL.
+        :param key_id: Specifies Specifies the Key ID of the subkey. This is specified as part of the URL.
         :type key_id: str | unicode
 
         :param mount_point: The "path" the method/backend was mounted on.
@@ -316,6 +316,41 @@ class OpenPGP(Transit):
             '/v1/{mount_point}/keys/{name}',
             mount_point=mount_point,
             name=name,
+        )
+
+        # The actual call to the plugin.
+        return self._adapter.delete(
+            url=api_path,
+        )
+
+    def delete_subkey(self, name, key_id, mount_point=DEFAULT_MOUNT_POINT):
+        """Delete the given subkey associated with the given master key.
+
+        Because this is a potentially catastrophic operation, use Vault policies instead to control who can
+        delete which keys.
+
+        Supported methods:
+            DELETE: /{mount_point}/keys/{name}/subkeys/{key_id}. Produces: 204 (empty body)
+
+        :param name: Specifies the name of the master key with which the subkey is associated. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param key_id: Specifies Specifies the Key ID of the subkey. This is specified as part of the URL.
+        :type key_id: str | unicode
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The response of the request.
+        :rtype: requests.Response
+        """
+
+        # JSON parameters to the plugin.
+        api_path = format_url(
+            '/v1/{mount_point}/keys/{name}/subkeys/{key_id}',
+            mount_point=mount_point,
+            name=name,
+            key_id=key_id,
         )
 
         # The actual call to the plugin.
