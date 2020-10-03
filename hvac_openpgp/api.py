@@ -220,7 +220,7 @@ class OpenPGP(Transit):
         :param name: Specifies the name of the master key with which the subkey is associated. This is specified as part of the URL.
         :type name: str | unicode
 
-        :param key_id: Specifies Specifies the Key ID of the subkey. This can also be specified as part of the URL.
+        :param key_id: Specifies Specifies the Key ID of the subkey. This is specified as part of the URL.
         :type key_id: str | unicode
 
         :param mount_point: The "path" the method/backend was mounted on.
@@ -263,6 +263,34 @@ class OpenPGP(Transit):
             url=api_path
         )
 
+    def list_subkeys(self, name, mount_point=DEFAULT_MOUNT_POINT):
+        """List subkeys (if there are any) associated with the GPG master key with the given name.
+
+        Only Key IDs of public keys of subkeys are returned.
+
+        Supported methods:
+            LIST: /{mount_point}/keys/{name}/subkeys. Produces: 200 application/json
+
+        :param name: Specifies the name of the master key with which the subkey is associated. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The JSON response of the request.
+        :rtype: dict
+        """
+
+        # The actual call to the plugin.
+        api_path = format_url(
+            '/v1/{mount_point}/keys/{name}/subkeys',
+            mount_point=mount_point,
+            name=name,
+        )
+        return self._adapter.list(
+            url=api_path
+        )
+
     def delete_key(self, name, mount_point=DEFAULT_MOUNT_POINT):
         """Delete a named encryption key.
 
@@ -288,6 +316,41 @@ class OpenPGP(Transit):
             '/v1/{mount_point}/keys/{name}',
             mount_point=mount_point,
             name=name,
+        )
+
+        # The actual call to the plugin.
+        return self._adapter.delete(
+            url=api_path,
+        )
+
+    def delete_subkey(self, name, key_id, mount_point=DEFAULT_MOUNT_POINT):
+        """Delete the given subkey associated with the given master key.
+
+        Because this is a potentially catastrophic operation, use Vault policies instead to control who can
+        delete which keys.
+
+        Supported methods:
+            DELETE: /{mount_point}/keys/{name}/subkeys/{key_id}. Produces: 204 (empty body)
+
+        :param name: Specifies the name of the master key with which the subkey is associated. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param key_id: Specifies Specifies the Key ID of the subkey. This is specified as part of the URL.
+        :type key_id: str | unicode
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The response of the request.
+        :rtype: requests.Response
+        """
+
+        # JSON parameters to the plugin.
+        api_path = format_url(
+            '/v1/{mount_point}/keys/{name}/subkeys/{key_id}',
+            mount_point=mount_point,
+            name=name,
+            key_id=key_id,
         )
 
         # The actual call to the plugin.
@@ -482,6 +545,121 @@ class OpenPGP(Transit):
             '/v1/{mount_point}/sign/{name}',
             mount_point=mount_point,
             name=name,
+        )
+        return self._adapter.post(
+            url=api_path,
+            json=params,
+        )
+
+    def sign_data_with_subkey(self, name, key_id, hash_input, key_version=None, hash_algorithm='sha2-512',
+                              context=None, prehashed=None, signature_algorithm=None,
+                              marshaling_algorithm='ascii-armor', expires=365*24*60*60,
+                              mount_point=DEFAULT_MOUNT_POINT):
+        """Return the signature of the given data using the given subkey associated with the given master key,
+        and the specified hash algorithm.
+
+        The key must be of a type that supports signing.
+
+        Supported methods:
+            POST: /{mount_point}/sign/{name}/subkeys/{key_id}(/{hash_algorithm}). Produces: 200 application/json
+
+        :param name: Specifies the name of the encryption key to use for signing. This is specified as part of the URL.
+        :type name: str | unicode
+
+        :param key_id: Specifies Specifies the Key ID of the subkey. This is specified as part of the URL.
+        :type key_id: str | unicode
+
+        :param hash_input: Specifies the base64 encoded input data.
+        :type hash_input: str | unicode
+
+        :param key_version: Specifies the version of the key to use for signing. If not set, uses the latest version.
+            Must be greater than or equal to the key's min_encryption_version, if set.
+            Not supported at the time of writing.
+        :type key_version: int
+
+        :param hash_algorithm: Specifies the hash algorithm to use for supporting key types (notably, not including
+            ed25519 which specifies its own hash algorithm). This can also be specified as part of the URL.
+            Currently-supported algorithms are: sha2-224, sha2-256, sha2-384, sha2-512
+        :type hash_algorithm: str | unicode
+
+        :param context: Base64 encoded context for key derivation. Required if key derivation is enabled; currently only
+            available with ed25519 keys. Not supported at the time of writing.
+        :type context: str | unicode
+
+        :param prehashed: Set to true when the input is already hashed. If the key type is rsa-2048 or rsa-4096, then
+            the algorithm used to hash the input should be indicated by the hash_algorithm parameter. Just as the value
+            to sign should be the base64-encoded representation of the exact binary data you want signed, when set, input
+            is expected to be base64-encoded binary hashed data, not hex-formatted. (As an example, on the command line,
+            you could generate a suitable input via openssl dgst -sha256 -binary | base64.)
+            Not supported at the time of writing.
+        :type prehashed: bool
+
+        :param signature_algorithm: When using a RSA key, specifies the RSA signature algorithm to use for signing.
+            Supported signature types are: pkcs1v15
+        :type signature_algorithm: str | unicode
+
+        :param marshaling_algorithm: Specifies the way in which the signature should be marshaled.
+            Supported types are: ascii-armor, base64
+        :type marshaling_algorithm: str | unicode
+
+        :param expires: Specifies the number of seconds from the creation time (now) after which the signature expires. If the number is zero, then the signature never expires.
+        :type expires: int
+
+        :param mount_point: The "path" the method/backend was mounted on.
+        :type mount_point: str | unicode
+
+        :return: The JSON response of the request.
+        :rtype: dict
+        """
+
+        # Unsupported parameters.
+        if key_version is not None:
+            raise UnsupportedParam('key versions not supported')
+        if context is not None:
+            raise UnsupportedParam('context for key derivation not supported')
+        if prehashed is not None:
+            raise UnsupportedParam('prehashed input not supported')
+
+        if hash_algorithm is not None and hash_algorithm not in ALLOWED_HASH_DATA_ALGORITHMS:
+            error_msg = 'invalid hash_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=hash_algorithm,
+                allowed_types=', '.join(ALLOWED_HASH_DATA_ALGORITHMS),
+            ))
+
+        # Validated but ignored for now.
+        if signature_algorithm is not None and signature_algorithm not in ALLOWED_SIGNATURE_ALGORITHMS:
+            error_msg = 'invalid signature_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=signature_algorithm,
+                allowed_types=', '.join(ALLOWED_SIGNATURE_ALGORITHMS),
+            ))
+
+        if marshaling_algorithm is not None and marshaling_algorithm not in ALLOWED_MARSHALING_ALGORITHMS:
+            error_msg = 'invalid marshaling_algorithm argument provided "{arg}", supported types: "{allowed_types}"'
+            raise ParamValidationError(error_msg.format(
+                arg=marshaling_algorithm,
+                allowed_types=', '.join(ALLOWED_MARSHALING_ALGORITHMS),
+            ))
+
+        # JSON parameters to the plugin.
+        params = {
+            'input': hash_input,
+        }
+        params.update(
+            remove_nones({
+                'algorithm': hash_algorithm,
+                'format': marshaling_algorithm,
+                'expires': expires,
+            })
+        )
+
+        # The actual call to the plugin.
+        api_path = format_url(
+            '/v1/{mount_point}/sign/{name}/subkeys/{key_id}',
+            mount_point=mount_point,
+            name=name,
+            key_id=key_id,
         )
         return self._adapter.post(
             url=api_path,
