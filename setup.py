@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="hvac-openpgp",
-    version="0.0.1",
+    version="0.0.2",
     author="Trishank Karthik Kuppusamy",
     author_email="trishank.kuppusamy@datadoghq.com",
     description="A Transit-Secrets-Engine-like API for vault-gpg-plugin",
