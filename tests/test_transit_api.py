@@ -6,6 +6,7 @@
 import base64
 import os
 import sys
+import time
 import unittest
 import uuid
 
@@ -288,7 +289,7 @@ class TestOpenPGP(unittest.TestCase):
     key_ids = r['data']['key_ids']
     self.assertIn(key_id, key_ids)
 
-    r = self.openpgp.sign_data_with_subkey(fixed_name, key_id, base64_input)
+    r = self.openpgp.sign_data(fixed_name, base64_input)
     s = r['data']['signature']
     r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
     self.assertTrue(r['data']['valid'])
@@ -304,101 +305,39 @@ class TestOpenPGP(unittest.TestCase):
     self.assertFalse(r['data']['valid'])
 
   def test_8_signing_with_subkeys(self):
+    SIG_EXPIRES_SECS = 3
+    KEY_EXPIRES_SECS = 2 * SIG_EXPIRES_SECS
+
     for key_type in ALLOWED_KEY_TYPES:
       fixed_name = self.random_name()
       fixed_input = 'Hello, world!'
       base64_input = self.base64ify(fixed_input)
-      base64_bad_input = self.base64ify(fixed_input+'!!')
 
-      # Create key.
+      # Create an expiring signing subkey.
       self.openpgp.create_key(fixed_name, key_type=key_type)
-      r = self.openpgp.create_subkey(fixed_name, key_type='rsa-2048')
-      key_id = r['data']['key_id']
+      self.openpgp.create_subkey(fixed_name, key_type=key_type, expires=KEY_EXPIRES_SECS)
 
-      # Unsupported parameters for signing.
-      unsupported_parameters = (
-        {'key_version': 2},
-        {'context': ''},
-        {'prehashed': True},
-      )
-      for parameter in unsupported_parameters:
-        with self.assertRaises(UnsupportedParam,
-                              msg=f'Unsupported parameter: {parameter}!'):
-          self.openpgp.sign_data_with_subkey(fixed_name, key_id, base64_input,
-                                             **parameter)
-
-      # Unsupported parameters for verification.
-      unsupported_parameters = (
-        {'context': ''},
-        {'hmac': ''},
-        {'prehashed': True},
-      )
-      for parameter in unsupported_parameters:
-        with self.assertRaises(UnsupportedParam,
-                              msg=f'Unsupported parameter: {parameter}!'):
-          self.openpgp.verify_signed_data(fixed_name, base64_input,
-                                          signature='', **parameter)
-
-      # Not base64 hash input for signing.
-      with self.assertRaises(InvalidRequest, msg='Not base64 hash input!'):
-        self.openpgp.sign_data_with_subkey(fixed_name, key_id, fixed_input)
-
-      # Not base64 hash input for verification.
-      with self.assertRaises(InvalidRequest, msg='Not base64 hash input!'):
-        self.openpgp.verify_signed_data(fixed_name, fixed_input, signature='')
-
-      # All supported as well as empty hash, marshaling, and signature algorithms.
-      for hash_algorithm in ALLOWED_HASH_DATA_ALGORITHMS | {None}:
-        for marshaling_algorithm in ALLOWED_MARSHALING_ALGORITHMS | {None}:
-          for signature_algorithm in ALLOWED_SIGNATURE_ALGORITHMS | {None}:
-            # Make a signature.
-            r = self.openpgp.sign_data_with_subkey(
-                  fixed_name, key_id, base64_input,
-                  hash_algorithm=hash_algorithm,
-                  marshaling_algorithm=marshaling_algorithm,
-                  signature_algorithm=signature_algorithm)
-            signature = r['data']['signature']
-
-            # Forget to pass signature for verification.
-            with self.assertRaises(ParamValidationError, msg='No "signature"!'):
-              self.openpgp.verify_signed_data(fixed_name, base64_input,
-                                                hash_algorithm=hash_algorithm,
-                                                marshaling_algorithm=marshaling_algorithm,
-                                                signature_algorithm=signature_algorithm)
-
-            # Original input.
-            r = self.openpgp.verify_signed_data(fixed_name, base64_input,
-                                                hash_algorithm=hash_algorithm,
-                                                marshaling_algorithm=marshaling_algorithm,
-                                                signature=signature,
-                                                signature_algorithm=signature_algorithm)
-            self.assertTrue(r['data']['valid'])
-
-            # Bad input.
-            r = self.openpgp.verify_signed_data(fixed_name, base64_bad_input,
-                                                hash_algorithm=hash_algorithm,
-                                                marshaling_algorithm=marshaling_algorithm,
-                                                signature=signature,
-                                                signature_algorithm=signature_algorithm)
-            self.assertFalse(r['data']['valid'])
-
-            # Bad signature.
-            mid_len = len(signature) // 2
-            bad_signature = signature[:mid_len] + '!!' + signature[mid_len:]
-            r = self.openpgp.verify_signed_data(fixed_name, base64_input,
-                                                hash_algorithm=hash_algorithm,
-                                                marshaling_algorithm=marshaling_algorithm,
-                                                signature=bad_signature,
-                                                signature_algorithm=signature_algorithm)
-            self.assertFalse(r['data']['valid'])
-
-            # TODO: pass in mismatching hashing/marshaling algorithm.
-
-      # Test default hashing/marshaling algorithms.
-      r = self.openpgp.sign_data_with_subkey(fixed_name, key_id, base64_input)
-      signature = r['data']['signature']
-      r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=signature)
+      # Test expiring signatures.
+      r = self.openpgp.sign_data(fixed_name, base64_input, expires=SIG_EXPIRES_SECS)
+      s = r['data']['signature']
+      # Before expiry.
+      r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
       self.assertTrue(r['data']['valid'])
+      # Sleep until signature expires.
+      time.sleep(SIG_EXPIRES_SECS)
+      # After expiry.
+      r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
+      self.assertFalse(r['data']['valid'])
+
+      # Test key expiration.
+      r = self.openpgp.sign_data(fixed_name, base64_input)
+      s = r['data']['signature']
+      r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
+      self.assertTrue(r['data']['valid'])
+      # Sleep until key expires.
+      time.sleep(KEY_EXPIRES_SECS)
+      r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
+      self.assertFalse(r['data']['valid'])
 
   def tearDown(self):
     pass
