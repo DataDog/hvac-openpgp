@@ -305,7 +305,7 @@ class TestOpenPGP(unittest.TestCase):
     self.assertFalse(r['data']['valid'])
 
   def test_8_signing_with_subkeys(self):
-    SIG_EXPIRES_SECS = 3
+    SIG_EXPIRES_SECS = 6
     KEY_EXPIRES_SECS = 2 * SIG_EXPIRES_SECS
 
     for key_type in ALLOWED_KEY_TYPES:
