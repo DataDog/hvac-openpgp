@@ -28,7 +28,8 @@ class OpenPGP(Transit):
     """
 
     def create_key(self, name, convergent_encryption=None, derived=None, exportable=None, allow_plaintext_backup=None,
-                   key_type='rsa-4096', real_name=None, email=None, comment=None, mount_point=DEFAULT_MOUNT_POINT):
+                   key_type='rsa-4096', real_name=None, email=None, comment=None, expires=365*24*60*60,
+                   mount_point=DEFAULT_MOUNT_POINT):
         """Create a new named encryption key of the specified type.
 
         The values set here cannot be changed after key creation.
@@ -70,6 +71,9 @@ class OpenPGP(Transit):
             * **rsa-4096**: RSA with bit size of 4096 (asymmetric)
         :type key_type: str | unicode
 
+        :param expires: Specifies the number of seconds from the creation time (now) after which the master key and encryption subkey expire. If the number is zero, then they never expire.
+        :type expires: int
+
         :param mount_point: The "path" the method/backend was mounted on.
         :type mount_point: str | unicode
 
@@ -99,6 +103,7 @@ class OpenPGP(Transit):
         params = remove_nones({
             'comment': comment,
             'email': email,
+            'expires': expires,
             'exportable': exportable,
             'generate': True,
             'key_bits': key_bits,

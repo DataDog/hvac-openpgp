@@ -127,11 +127,12 @@ class TestOpenPGP(unittest.TestCase):
           return output_bytes
 
   def test_4_sign_and_verify_data(self):
+    fixed_input = 'Hello, world!'
+    base64_input = self.base64ify(fixed_input)
+    base64_bad_input = self.base64ify(fixed_input+'!!')
+
     for key_type in ALLOWED_KEY_TYPES:
       fixed_name = self.random_name()
-      fixed_input = 'Hello, world!'
-      base64_input = self.base64ify(fixed_input)
-      base64_bad_input = self.base64ify(fixed_input+'!!')
 
       # Sign w/o creating.
       with self.assertRaises(InvalidRequest,
@@ -305,13 +306,13 @@ class TestOpenPGP(unittest.TestCase):
     self.assertFalse(r['data']['valid'])
 
   def test_8_signing_with_subkeys(self):
-    SIG_EXPIRES_SECS = 6
+    SIG_EXPIRES_SECS = 10
     KEY_EXPIRES_SECS = 2 * SIG_EXPIRES_SECS
+    fixed_input = 'Hello, world!'
+    base64_input = self.base64ify(fixed_input)
 
     for key_type in ALLOWED_KEY_TYPES:
       fixed_name = self.random_name()
-      fixed_input = 'Hello, world!'
-      base64_input = self.base64ify(fixed_input)
 
       # Create an expiring signing subkey.
       self.openpgp.create_key(fixed_name, key_type=key_type)
@@ -328,6 +329,27 @@ class TestOpenPGP(unittest.TestCase):
       # After expiry.
       r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
       self.assertFalse(r['data']['valid'])
+
+      # Test key expiration.
+      r = self.openpgp.sign_data(fixed_name, base64_input)
+      s = r['data']['signature']
+      r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
+      self.assertTrue(r['data']['valid'])
+      # Sleep until key expires.
+      time.sleep(KEY_EXPIRES_SECS)
+      r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
+      self.assertFalse(r['data']['valid'])
+
+  def test_9_expiring_master_keys(self):
+    KEY_EXPIRES_SECS = 20
+    fixed_input = 'Hello, world!'
+    base64_input = self.base64ify(fixed_input)
+
+    for key_type in ALLOWED_KEY_TYPES:
+      fixed_name = self.random_name()
+
+      # Create an expiring signing subkey.
+      self.openpgp.create_key(fixed_name, key_type=key_type, expires=KEY_EXPIRES_SECS)
 
       # Test key expiration.
       r = self.openpgp.sign_data(fixed_name, base64_input)
