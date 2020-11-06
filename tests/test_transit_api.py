@@ -27,13 +27,25 @@ from hvac_openpgp.exceptions import UnsupportedParam
 
 class TestOpenPGP(unittest.TestCase):
 
-  def setUp(self):
+  @classmethod
+  def setUpClass(cls):
     # Useful test constants.
-    self.EXPORTABLE = (None, False, True)
+    cls.EXPORTABLE = (None, False, True)
 
     # The only part of the API we care about.
-    self.__client = Client(os.environ['VAULT_ADDR'], os.environ['VAULT_TOKEN'])
-    self.openpgp = self.__client.secrets.openpgp
+    client = Client(os.environ['VAULT_ADDR'], os.environ['VAULT_TOKEN'])
+    cls.openpgp = client.secrets.openpgp
+
+  def tearDown(self):
+    try:
+      r1 = self.openpgp.list_keys()
+    except InvalidPath:
+      pass
+    else:
+      # https://github.com/hashicorp/vault/blob/00494efd12bd7f762c38856ab83b69d8eeb8d1ac/sdk/logical/response.go#L131
+      for name in r1['data']['keys']:
+        r2 = self.openpgp.delete_key(name)
+        r2.raise_for_status()
 
   def random_name(self):
     return str(uuid.uuid4())
@@ -52,6 +64,7 @@ class TestOpenPGP(unittest.TestCase):
       keys.append(name)
 
     r = self.openpgp.list_keys()
+    # https://github.com/hashicorp/vault/blob/00494efd12bd7f762c38856ab83b69d8eeb8d1ac/sdk/logical/response.go#L131
     assert sorted(r['data']['keys']) == sorted(keys)
 
   def test_2_read_key(self):
@@ -287,7 +300,8 @@ class TestOpenPGP(unittest.TestCase):
     self.openpgp.read_subkey(fixed_name, key_id)
 
     r = self.openpgp.list_subkeys(fixed_name)
-    key_ids = r['data']['key_ids']
+    # https://github.com/hashicorp/vault/blob/00494efd12bd7f762c38856ab83b69d8eeb8d1ac/sdk/logical/response.go#L131
+    key_ids = r['data']['keys']
     self.assertIn(key_id, key_ids)
 
     r = self.openpgp.sign_data(fixed_name, base64_input)
@@ -299,7 +313,8 @@ class TestOpenPGP(unittest.TestCase):
     r.raise_for_status()
 
     r = self.openpgp.list_subkeys(fixed_name)
-    key_ids = r['data']['key_ids']
+    # https://github.com/hashicorp/vault/blob/00494efd12bd7f762c38856ab83b69d8eeb8d1ac/sdk/logical/response.go#L131
+    key_ids = r['data']['keys']
     self.assertNotIn(key_id, key_ids)
 
     r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
@@ -360,9 +375,6 @@ class TestOpenPGP(unittest.TestCase):
       time.sleep(KEY_EXPIRES_SECS)
       r = self.openpgp.verify_signed_data(fixed_name, base64_input, signature=s)
       self.assertFalse(r['data']['valid'])
-
-  def tearDown(self):
-    pass
 
 if __name__ == '__main__':
   unittest.main()
