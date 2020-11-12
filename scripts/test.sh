@@ -9,7 +9,8 @@ GOBIN=$PWD/bin go get github.com/DataDog/vault-gpg-plugin
 
 vault server -dev -dev-root-token-id=$VAULT_TOKEN -dev-plugin-dir=bin &
 VAULT_PID=$!
-vault login root
+
+sleep 5
 vault secrets enable vault-gpg-plugin
 
 python3 -m pip install -U tox
